@@ -223,6 +223,8 @@ sub cleanup {
   # remove leading and trailing whitespace
   $string =~ s/^\s+//;
   $string =~ s/\s+$//;
+  # fix any newlines or tabs with this
+  $string =~ s/\s+/ /g;
   return $string;
 }
 
