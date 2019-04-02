@@ -209,6 +209,7 @@ if ($disambiguate) {
 
 }
 
+print "encoding: utf-8\n"; # needed for clean conversions downstream
 $ontology->export('obo', \*STDOUT);
 
 
