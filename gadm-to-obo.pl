@@ -119,7 +119,7 @@ foreach my $level (0 .. $max_level) {
         $ontology->create_rel($term, $default_relationship, $terms{$parent_id});
 
         my $engtype = $dbf->{"ENGTYPE_$level"};
-	$term->comment("GADMTYPE: $engtype");
+	$term->comment("GADM ADM$level TYPE: $engtype");
         my $parent_name = $parent_term->name;
         $term->def_as_string("$engtype in $parent_name", "[GADM:$id]");
       } else {
@@ -127,7 +127,7 @@ foreach my $level (0 .. $max_level) {
       }
     } else {
       $term->def_as_string("Country", "[GADM:$id]");
-      $term->comment("GADMTYPE: None/Country");
+      $term->comment("GADM ADM0 TYPE: Not provided, assumed 'country'");
 
       # now look up higher level continent terms
       my $cterm = $continents->get_term_by_name($name);
