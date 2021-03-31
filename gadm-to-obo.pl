@@ -1,4 +1,4 @@
-#!/bin/env perl
+#!/usr/bin/env perl
 #       -*- mode: Cperl -*-
 #
 # creates a simple "is_a" based ontology of GADM placenames and merges in high-level
@@ -14,6 +14,9 @@
 #                                # top level ontology maintained at: https://github.com/bobular/VB-top-level-GEO
 #
 #         --nodisambiguate       # don't change multiple "Santa Marias" into "Santa Maria (Argentina)", "Santa Maria (Brazil)" etc
+#
+#         --default-relationship located_in
+#         --default-prefix VEuGEO
 #
 # Terminology in the script:
 #
@@ -43,28 +46,37 @@ use Encode::Detect::Detector;
 use OBO::Parser::OBOParser;
 
 my $max_level = 2;
-my $accession_prefix = 'VBGEO';
-my $continents_obofile = 'VB-top-level-GEO/VB-top-level-GEO.obo'; # get this from https://github.com/bobular/VB-top-level-GEO/
+my $accession_prefix = 'VEuGEO';
+my $continents_obofile; # now optional, was 'VB-top-level-GEO/VB-top-level-GEO.obo'; # get this from https://github.com/bobular/VB-top-level-GEO/
 my $disambiguate = 1;
+my $default_relationship = 'located_in';
+
 
 GetOptions("max-level=i"=>\$max_level,
            "continents-obofile=s"=>\$continents_obofile,
            "disambiguate!"=>\$disambiguate,
+	   "default-relationship=s"=>\$default_relationship,
+	   "default-prefix=s"=>\$accession_prefix,
           );
 
 my ($stem) = @ARGV;
 
-die "can't find continents obo file '$continents_obofile'\n" unless (-s $continents_obofile);
+die "can't find continents obo file '$continents_obofile'\n" if ($continents_obofile && !-s $continents_obofile);
 
 my $obo_parser = OBO::Parser::OBOParser->new;
-my $continents = $obo_parser->work($continents_obofile);
-my $default_cparent = $continents->get_term_by_name('Earth');
+my $continents = $continents_obofile ? $obo_parser->work($continents_obofile) : OBO::Core::Ontology->new;
+
+# if no "continents ontology" was provided, use a single "Earth" term instead
+my $default_earth = OBO::Core::Term->new();
+$default_earth->name('Earth');
+$default_earth->id('Earth');
+my $default_cparent = $continents->get_term_by_name('Earth') || $continents->add_term($default_earth);
 
 my $ontology = OBO::Core::Ontology->new;
 $ontology->name("Database of Global Administrative Areas");
 $ontology->default_namespace($accession_prefix);
 
-$ontology->add_relationship_type_as_string('is_a', 'is_a');
+$ontology->add_relationship_type_as_string($default_relationship, $default_relationship);
 
 my %terms;      # ID (AGO.5_1) -> term object
 my %accessions; # ID (AGO.5_1) -> accession string (GADM:0001234)
@@ -104,9 +116,10 @@ foreach my $level (0 .. $max_level) {
     if ($parent_level >= 0) {
       my $parent_id = $dbf->{"GID_$parent_level"};
       if (my $parent_term = $terms{$parent_id}) {
-        $ontology->create_rel($term, 'is_a', $terms{$parent_id});
+        $ontology->create_rel($term, $default_relationship, $terms{$parent_id});
 
         my $engtype = $dbf->{"ENGTYPE_$level"};
+	$term->comment("GADMTYPE: $engtype");
         my $parent_name = $parent_term->name;
         $term->def_as_string("$engtype in $parent_name", "[GADM:$id]");
       } else {
@@ -114,6 +127,7 @@ foreach my $level (0 .. $max_level) {
       }
     } else {
       $term->def_as_string("Country", "[GADM:$id]");
+      $term->comment("GADMTYPE: None/Country");
 
       # now look up higher level continent terms
       my $cterm = $continents->get_term_by_name($name);
@@ -124,7 +138,7 @@ foreach my $level (0 .. $max_level) {
       } else {
         # OK let's just link it to "Earth"
         my $new_earth = find_or_copy_term($continents, $default_cparent, $ontology);
-        $ontology->create_rel($term, 'is_a', $new_earth);
+        $ontology->create_rel($term, $default_relationship, $new_earth);
       }
     }
 
@@ -272,7 +286,7 @@ sub link_to_continent_parents {
   foreach my $cparent (@{ $continents->get_parent_terms($cterm) }) {
 
     my $oparent = find_or_copy_term($continents, $cparent, $ontology);
-    $ontology->create_rel($term, 'is_a', $oparent);
+    $ontology->create_rel($term, $default_relationship, $oparent);
 
     # and recurse back up to the root of $continents
     link_to_continent_parents($continents, $cparent, $ontology, $oparent);
